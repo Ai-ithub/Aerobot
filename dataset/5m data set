@@ -1,0 +1,196 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import random
+
+# تنظیمات اولیه
+np.random.seed(42)
+total_normal_samples = 5_000_000
+total_anomaly_samples = 100_000
+
+## 1. تولید داده‌های نرمال (5 میلیون رکورد)
+
+def generate_normal_data(num_samples):
+    # محدوده‌های عملکرد نرمال بر اساس الزامات مسابقه
+    data = {
+        'timestamp': [],
+        'team_id': [],
+        'packet_id': [],
+        'latitude': [],
+        'longitude': [],
+        'altitude': [],
+        'temperature': [],
+        'pressure': [],
+        'humidity': [],
+        'vertical_speed': [],
+        'horizontal_speed': [],
+        'roll': [],
+        'pitch': [],
+        'yaw': [],
+        'battery_voltage': [],
+        'signal_strength': [],
+        'flight_phase': []
+    }
+    
+    # پارامترهای پایه
+    start_time = datetime.now()
+    base_lat = 35.6892  # تهران
+    base_lon = 51.3890
+    base_alt = 300  # متر
+    
+    for i in range(num_samples):
+        time_delta = timedelta(seconds=i/10)  # 10 نمونه در ثانیه
+        data['timestamp'].append(start_time + time_delta)
+        data['team_id'].append(f"TM{random.randint(100, 999)}")
+        data['packet_id'].append(i+1)
+        
+        # تغییرات موقعیت (شبیه‌سازی پرواز)
+        progress = min(i / (num_samples/10), 1.0)  # پیشرفت در مأموریت
+        
+        # فازهای پرواز: 0=رهاسازی, 1=سقوط آزاد, 2=پایدارسازی, 3=گلاید
+        if progress < 0.1:
+            phase = 0  # رهاسازی
+            alt = base_alt - (progress * 100)  # سقوط سریع اولیه
+        elif progress < 0.3:
+            phase = 1  # سقوط آزاد
+            alt = base_alt - 30 - (progress * 200)
+        elif progress < 0.6:
+            phase = 2  # پایدارسازی
+            alt = base_alt - 100 - (progress * 150)
+        else:
+            phase = 3  # گلاید
+            alt = base_alt - 180 - ((progress-0.6) * 50)
+        
+        data['altitude'].append(max(alt, 0))
+        
+        # مختصات جغرافیایی با تغییرات کوچک
+        data['latitude'].append(base_lat + (random.random() * 0.01 - 0.005))
+        data['longitude'].append(base_lon + (random.random() * 0.01 - 0.005))
+        
+        # داده‌های محیطی
+        data['temperature'].append(20 + (alt/100 * -0.6) + random.random() * 2 - 1)
+        data['pressure'].append(1013 - (alt/10) + random.random() * 5 - 2.5)
+        data['humidity'].append(30 + random.random() * 40)
+        
+        # سرعت‌ها
+        if phase == 0:
+            data['vertical_speed'].append(-15 + random.random() * 5 - 2.5)
+            data['horizontal_speed'].append(0.1 + random.random() * 0.5)
+        elif phase == 1:
+            data['vertical_speed'].append(-25 + random.random() * 10 - 5)
+            data['horizontal_speed'].append(0.5 + random.random() * 2)
+        elif phase == 2:
+            data['vertical_speed'].append(-5 + random.random() * 4 - 2)
+            data['horizontal_speed'].append(8 + random.random() * 4 - 2)
+        else:
+            data['vertical_speed'].append(-1 + random.random() * 2 - 1)
+            data['horizontal_speed'].append(12 + random.random() * 6 - 3)
+        
+        # وضعیت پرواز
+        data['roll'].append(random.random() * 10 - 5)
+        data['pitch'].append(random.random() * 15 - 7.5)
+        data['yaw'].append(random.random() * 20 - 10)
+        
+        # وضعیت سیستم
+        data['battery_voltage'].append(3.7 - (progress * 0.5) + random.random() * 0.2 - 0.1)
+        data['signal_strength'].append(90 - (progress * 20) + random.random() * 10 - 5)
+        data['flight_phase'].append(phase)
+    
+    return pd.DataFrame(data)
+
+## 2. تولید داده‌های آنومالی (100 هزار رکورد)
+
+def generate_anomaly_data(num_samples):
+    anomalies = {
+        'timestamp': [],
+        'team_id': [],
+        'packet_id': [],
+        'anomaly_type': [],
+        'original_value': [],
+        'anomaly_value': [],
+        'sensor_type': [],
+        'severity': []
+    }
+    
+    # انواع آنومالی‌های ممکن
+    anomaly_types = [
+        'spike', 'dropout', 'noise', 'stucketing', 
+        'freeze', 'drift', 'variance_change'
+    ]
+    sensor_types = [
+        'altitude', 'temperature', 'pressure', 'humidity',
+        'vertical_speed', 'horizontal_speed', 'battery'
+    ]
+    
+    for i in range(num_samples):
+        anomalies['timestamp'].append(datetime.now() - timedelta(seconds=random.randint(0, 86400)))
+        anomalies['team_id'].append(f"TM{random.randint(100, 999)}")
+        anomalies['packet_id'].append(random.randint(1, 50000))
+        anomalies['anomaly_type'].append(random.choice(anomaly_types))
+        
+        # انتخاب سنسور و تولید مقدار آنومالی
+        sensor = random.choice(sensor_types)
+        anomalies['sensor_type'].append(sensor)
+        
+        # تولید مقادیر پایه بر اساس سنسور
+        if sensor == 'altitude':
+            base_val = random.randint(0, 350)
+        elif sensor == 'temperature':
+            base_val = random.uniform(-10, 40)
+        elif sensor == 'pressure':
+            base_val = random.uniform(800, 1100)
+        elif sensor == 'humidity':
+            base_val = random.uniform(0, 100)
+        elif sensor == 'vertical_speed':
+            base_val = random.uniform(-30, 5)
+        elif sensor == 'horizontal_speed':
+            base_val = random.uniform(0, 20)
+        else:  # battery
+            base_val = random.uniform(2.5, 4.2)
+        
+        anomalies['original_value'].append(base_val)
+        
+        # اعمال آنومالی بر اساس نوع
+        anomaly_type = anomalies['anomaly_type'][-1]
+        if anomaly_type == 'spike':
+            anomaly_val = base_val * (1 + random.choice([-1, 1]) * random.uniform(0.5, 5))
+            severity = 'high'
+        elif anomaly_type == 'dropout':
+            anomaly_val = 0 if random.random() > 0.5 else base_val * 0.1
+            severity = 'critical' if anomaly_val == 0 else 'medium'
+        elif anomaly_type == 'noise':
+            anomaly_val = base_val + random.uniform(-1, 1) * base_val * 0.3
+            severity = 'low'
+        elif anomaly_type == 'bucketing':
+            anomaly_val = round(base_val / 10) * 10
+            severity = 'medium'
+        elif anomaly_type == 'freeze':
+            anomaly_val = base_val
+            severity = 'high'
+        elif anomaly_type == 'drift':
+            anomaly_val = base_val + (random.random() * 2 - 1) * base_val * 0.5 * (i/num_samples)
+            severity = 'medium'
+        else:  # variance_change
+            anomaly_val = base_val + (random.random() * 2 - 1) * base_val * random.uniform(0.1, 0.5)
+            severity = 'low'
+        
+        anomalies['anomaly_value'].append(anomaly_val)
+        anomalies['severity'].append(severity)
+    
+    return pd.DataFrame(anomalies)
+
+## 3. تولید و ذخیره داده‌ها
+print("در حال تولید داده‌های نرمال...")
+normal_data = generate_normal_data(total_normal_samples)
+
+print("در حال تولید داده‌های آنومالی...")
+anomaly_data = generate_anomaly_data(total_anomaly_samples)
+
+print("در حال ذخیره داده‌ها...")
+with pd.ExcelWriter('cansat_flight_data.xlsx') as writer:
+    normal_data.to_excel(writer, sheet_name='Normal_Data', index=False)
+    anomaly_data.to_excel(writer, sheet_name='Anomaly_Data', index=False)
+
+print("تولید داده‌ها با موفقیت انجام شد!")
+print(f"- تعداد داده‌های نرمال: {len(normal_data):,}")
+print(f"- تعداد داده‌های آنومالی: {len(anomaly_data):,}")
